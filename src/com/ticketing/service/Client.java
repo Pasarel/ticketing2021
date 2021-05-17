@@ -2,7 +2,8 @@ package com.ticketing.service;
 
 import java.util.TreeSet;
 
-public class Client {
+public class Client implements Factory<Client> {
+
     private static Integer count = 0;
     private Integer id;
     private String name, surname;
@@ -17,11 +18,22 @@ public class Client {
         events = new TreeSet();
         count++;
     }
+    void set(String Name, String Surname, Float credit, TreeSet<Event> events, Integer id) {
+        this.name = Name;
+        this.surname = Surname;
+        this.credit = credit;
+        this.events = events;
+        this.id = id;
+        count = id + 1;
+    }
+
+    public Client() {}
+
     public Integer getId() {
         return id;
     }
     public String getFullName() {
-        return name + " " + surname;
+        return surname + "," + name;
     }
     public Float getCredit() {
         return credit;
@@ -45,5 +57,10 @@ public class Client {
     void removeEvent(Event e) {
         addCredit(e.getPrice());
         events.remove(e);
+    }
+
+    @Override
+    public Client create() {
+        return new Client();
     }
 }
