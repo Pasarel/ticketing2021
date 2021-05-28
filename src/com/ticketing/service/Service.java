@@ -4,6 +4,8 @@ import com.sun.source.tree.Tree;
 import javax.lang.model.element.Element;
 import javax.naming.Name;
 import java.io.*;
+import java.sql.SQLException;
+import java.sql.SQLIntegrityConstraintViolationException;
 import java.sql.Timestamp;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
@@ -13,13 +15,14 @@ import java.util.TreeMap;
 import java.util.TreeSet;
 
 public class Service {
-    class TicketingException extends Exception {
+    public class TicketingException extends Exception {
         TicketingException(String str) {
             super(str);
         }
     }
 
     private BufferedWriter logging;
+    private DBConnection db_con = null;
     static private TreeMap<Integer, Client> clients;
     static private TreeMap<Integer, Event> events;
     static private TreeMap<Integer, Location> locations;
@@ -42,22 +45,44 @@ public class Service {
     public void stoplogging() throws IOException {
         logging.close();
     }
-    public Integer newClient(String name, String surname) throws IOException {
+    public void openDB() throws SQLException {
+        db_con = DBConnection.getInstance();
+    }
+    public void closeDB() throws SQLException {
+        db_con.close();
+    }
+    public void readDB() throws TicketingException, SQLException {
+        if (db_con == null) {
+            throw new TicketingException("No database connection open!");
+        }
+        locations = db_con.readLocations();
+        events    = db_con.readEvents(locations);
+        clients   = db_con.readClients(events);
+    }
+    public Integer newClient(String name, String surname) throws IOException, SQLException {
         Client newC = new Client(name, surname);
         Integer id = newC.getId();
         clients.put(id, newC);
+        if (db_con != null) {
+            try {
+                db_con.createClient(newC);
+            }catch (SQLIntegrityConstraintViolationException exc) {
+            }
+        }
         logaction("newClient");
         return id;
     }
-    public void removeClient(Integer id) throws TicketingException, IOException {
-        // GDPR duh
+    public void removeClient(Integer id) throws TicketingException, IOException, SQLException {
         if (clients.get(id) == null) {
             throw new TicketingException("com.ticketing.service removeClient(" + id + "): Client doesn't exist");
         }
-        logaction("removeClient");
+        if (db_con != null) {
+            db_con.deleteClient(id, clients);
+        }
         clients.remove(id);
+        logaction("removeClient");
     }
-    public void addEventToClient(Integer clientid, Integer eventid) throws TicketingException, IOException {
+    public void addEventToClient(Integer clientid, Integer eventid) throws TicketingException, IOException, SQLException {
         Client c = clients.get(clientid);
         Event  e = events.get(eventid);
         if (c == null || e == null) {
@@ -66,9 +91,15 @@ public class Service {
         if (c.addEvent(e) == -1) {
             throw new TicketingException("com.ticketing.service: Not enough credit to add event " + e.getName() + " to client " + c.getFullName());
         }
+        if (db_con != null) {
+            try {
+                db_con.addJunction(clientid, eventid);
+            } catch (SQLIntegrityConstraintViolationException exc) {
+            }
+        }
         logaction("addEventToClient");
     }
-    public void removeEventFromClient(Integer clientid, Integer eventid) throws TicketingException, IOException {
+    public void removeEventFromClient(Integer clientid, Integer eventid) throws TicketingException, IOException, SQLException {
         Client c = clients.get(clientid);
         Event  e = events.get(eventid);
         if (c == null || e == null) {
@@ -76,14 +107,20 @@ public class Service {
         }
         logaction("removeEventFromClient");
         c.removeEvent(e);
+        if (db_con != null) {
+            db_con.removeJunction(clientid, eventid);
+        }
     }
-    public void addCredit(Integer clientid, Float credit) throws TicketingException, IOException {
+    public void addCredit(Integer clientid, Float credit) throws TicketingException, IOException, SQLException {
         Client c = clients.get(clientid);
         if (c == null) {
             throw new TicketingException("com.ticketing.service addCredit: " + clientid + " client doesn't exist");
         }
-        logaction("addCredit");
         c.addCredit(credit);
+        if (db_con != null) {
+            db_con.modifyClientCredit(clientid, c.getCredit());
+        }
+        logaction("addCredit");
     }
     public void printClientEvents(Integer clientid) throws TicketingException, IOException {
         Client c = clients.get(clientid);
@@ -102,12 +139,15 @@ public class Service {
         if (c == null) {
             throw new TicketingException("com.ticketing.service printClientInfo: " + clientid + " client doesn't exist");
         }
-        System.out.println(c.getFullName());
+        System.out.print(c.getFullName() + ' ');
         System.out.println(c.getCredit());
-        System.out.println("Next event: " + c.events.first());
+        try {
+            System.out.println("Next event: " + c.events.first());
+        } catch (Exception e) {
+        }
         logaction("printClientInfo");
     }
-    public Integer newEvent(String name, Integer locID, Float price, Date date) throws TicketingException, IOException {
+    public Integer newEvent(String name, Integer locID, Float price, Date date) throws TicketingException, IOException, SQLException {
         Location loc = locations.get(locID);
         if (loc == null) {
             throw new TicketingException("com.ticketing.service newEvent: " + locID + " location doesn't exist");
@@ -115,10 +155,16 @@ public class Service {
         Event newE = new Event(name, loc, price, date);
         Integer id = newE.getId();
         events.put(id, newE);
+        if (db_con != null) {
+            try {
+                db_con.createEvent(newE);
+            }catch (SQLIntegrityConstraintViolationException exc) {
+            }
+        }
         logaction("newEvent");
         return id;
     }
-    public Integer newConcert(String name, Integer locID, Float price, Date date) throws TicketingException, IOException {
+    public Integer newConcert(String name, Integer locID, Float price, Date date) throws TicketingException, IOException, SQLException {
         Location loc = locations.get(locID);
         if (loc == null) {
             throw new TicketingException("com.ticketing.service newEvent: " + locID + " location doesn't exist");
@@ -126,10 +172,16 @@ public class Service {
         Concert newE = new Concert(name, loc, price, date);
         Integer id = newE.getId();
         events.put(id, newE);
+        if (db_con != null) {
+            try {
+                db_con.createEvent(newE);
+            }catch (SQLIntegrityConstraintViolationException exc) {
+            }
+        }
         logaction("newConcert");
         return id;
     }
-    public Integer newPlay(String name, Integer locID, Float price, Date date) throws TicketingException, IOException {
+    public Integer newPlay(String name, Integer locID, Float price, Date date) throws TicketingException, IOException, SQLException {
         Location loc = locations.get(locID);
         if (loc == null) {
             throw new TicketingException("com.ticketing.service newEvent: " + locID + " location doesn't exist");
@@ -137,10 +189,16 @@ public class Service {
         Play newE = new Play(name, loc, price, date);
         Integer id = newE.getId();
         events.put(id, newE);
+        if (db_con != null) {
+            try {
+                db_con.createEvent(newE);
+            }catch (SQLIntegrityConstraintViolationException exc) {
+            }
+        }
         logaction("newPlay");
         return id;
     }
-    public void removeEvent(Integer eventid) throws TicketingException, IOException {
+    public void removeEvent(Integer eventid) throws TicketingException, IOException, SQLException {
         //  social distancing duh
         Event e = events.get(eventid);
         if (e == null) {
@@ -151,6 +209,9 @@ public class Service {
             eventTree.remove(e);
         }
         events.remove(eventid);
+        if (db_con != null) {
+            db_con.deleteEvent(eventid);
+        }
         logaction("removeEvent");
     }
     public void printEventInfo(Integer eventid) throws TicketingException, IOException {
@@ -162,16 +223,26 @@ public class Service {
         logaction("printEventInfo");
     }
 
-    public Integer newLocation(String name) throws IOException {
+    public Integer newLocation(String name) throws IOException, SQLException {
         Location newL = new Location(name);
         Integer id = newL.getId();
         locations.put(id, newL);
+        if (db_con != null) {
+            try {
+                db_con.createLocation(newL);
+            } catch (SQLIntegrityConstraintViolationException exc) {
+            }
+        }
         logaction("newLocation");
         return id;
     }
 
-    public void newLocation(Location loc) {
+    public void newLocation(Location loc) throws IOException, SQLException {
         locations.put(loc.getId(), loc);
+        if (db_con != null) {
+            db_con.createLocation(loc);
+        }
+        logaction("newLocation");
     }
 
     public static class GenericSingletonReader<T> {

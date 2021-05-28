@@ -9,13 +9,13 @@ public class Event implements Factory<Event>, Comparable<Event>  {
     private Date date;
     private Float price;
 
-    void set(String name, Location loc, Float price, Date date, Integer id) {
+    public void set(String name, Location loc, Float price, Date date, Integer id) {
         this.id = id;
         this.name  = name;
         this.loc   = loc;
         this.date  = date;
         this.price = price;
-        count = id + 1;
+        count = (id >= count) ? id + 1 : count;
     }
 
     public Event(String name, Location loc, Float price, Date date) {

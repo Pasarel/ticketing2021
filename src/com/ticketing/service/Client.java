@@ -18,13 +18,13 @@ public class Client implements Factory<Client> {
         events = new TreeSet();
         count++;
     }
-    void set(String Name, String Surname, Float credit, TreeSet<Event> events, Integer id) {
+    public void set(String Name, String Surname, Float credit, TreeSet<Event> events, Integer id) {
         this.name = Name;
         this.surname = Surname;
         this.credit = credit;
         this.events = events;
         this.id = id;
-        count = id + 1;
+        count = (id >= count) ? id + 1 : count;
     }
 
     public Client() {}
@@ -32,6 +32,8 @@ public class Client implements Factory<Client> {
     public Integer getId() {
         return id;
     }
+    public String getName() { return name; }
+    public String getSurname() { return surname; }
     public String getFullName() {
         return surname + "," + name;
     }
@@ -63,4 +65,6 @@ public class Client implements Factory<Client> {
     public Client create() {
         return new Client();
     }
+
+    public TreeSet<Event> getEvents() { return events; }
 }

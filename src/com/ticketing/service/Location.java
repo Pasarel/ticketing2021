@@ -10,11 +10,10 @@ public class Location implements Factory<Location> {
         id = count;
         count++;
     }
-    void set(String name, Integer ID) {
+    public void set(String name, Integer ID) {
         this.name = name;
         this.id = ID;
-        count = id;
-        count++;
+        count = (id >= count) ? id + 1 : count;
     }
 
     public Location() {
@@ -28,7 +27,6 @@ public class Location implements Factory<Location> {
     public Integer getId() {
         return id;
     }
-
     public String getName() {
         return name;
     }
